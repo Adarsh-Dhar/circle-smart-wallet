@@ -5,43 +5,33 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Fingerprint, Loader2, AlertCircle, CheckCircle } from "lucide-react"
-import { useRouter } from "next/navigation"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Fingerprint, Loader2, AlertCircle, CheckCircle, User } from "lucide-react"
+import { useWallet } from "@/hooks/use-wallet"
 
 export default function LoginPage() {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [isAuthenticating, setIsAuthenticating] = useState(false)
+  const [username, setUsername] = useState("")
   const [error, setError] = useState("")
   const [success, setSuccess] = useState(false)
-  const router = useRouter()
+  const { login } = useWallet()
 
   const handlePasskeyLogin = async () => {
+    if (!username.trim()) {
+      setError("Please enter a username")
+      return
+    }
+
     setIsAuthenticating(true)
     setError("")
 
     try {
-      // Mock WebAuthn implementation
-      await new Promise((resolve) => setTimeout(resolve, 2000))
-
-      // Simulate random success/failure for demo
-      if (Math.random() > 0.2) {
-        setSuccess(true)
-
-        // Mock wallet address generation
-        const mockAddress =
-          "0x" + Array.from({ length: 40 }, () => Math.floor(Math.random() * 16).toString(16)).join("")
-
-        localStorage.setItem("wallet_authenticated", "true")
-        localStorage.setItem("wallet_address", mockAddress)
-
-        setTimeout(() => {
-          router.push("/dashboard")
-        }, 1500)
-      } else {
-        throw new Error("Passkey authentication failed")
-      }
+      await login(username.trim())
+      setSuccess(true)
     } catch (err) {
-      setError("Authentication failed. Please try again.")
+      setError(err instanceof Error ? err.message : "Authentication failed. Please try again.")
     } finally {
       setIsAuthenticating(false)
     }
@@ -107,34 +97,54 @@ export default function LoginPage() {
               </Alert>
             )}
 
-            <div className="flex flex-col items-center space-y-4 py-8">
-              <div className="h-20 w-20 rounded-full bg-gradient-to-br from-[#4EAAFF] to-[#0B1F56] flex items-center justify-center shadow-lg">
-                {isAuthenticating ? (
-                  <Loader2 className="h-10 w-10 text-white animate-spin" />
-                ) : success ? (
-                  <CheckCircle className="h-10 w-10 text-white" />
-                ) : (
-                  <Fingerprint className="h-10 w-10 text-white" />
-                )}
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="username" className="text-slate-900 dark:text-white">
+                  Username
+                </Label>
+                <div className="relative">
+                  <User className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
+                  <Input
+                    id="username"
+                    type="text"
+                    placeholder="Enter your username"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    className="pl-10 bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white"
+                    disabled={isAuthenticating || success}
+                  />
+                </div>
               </div>
 
-              <div className="text-center">
-                <p className="font-medium text-slate-900 dark:text-white">
-                  {isAuthenticating ? "Authenticating..." : success ? "Success!" : "Ready to authenticate"}
-                </p>
-                <p className="text-sm text-slate-600 dark:text-slate-400">
-                  {isAuthenticating
-                    ? "Please complete the biometric verification"
-                    : success
-                      ? "Taking you to your dashboard"
-                      : "Click the button below to start"}
-                </p>
+              <div className="flex flex-col items-center space-y-4 py-8">
+                <div className="h-20 w-20 rounded-full bg-gradient-to-br from-[#4EAAFF] to-[#0B1F56] flex items-center justify-center shadow-lg">
+                  {isAuthenticating ? (
+                    <Loader2 className="h-10 w-10 text-white animate-spin" />
+                  ) : success ? (
+                    <CheckCircle className="h-10 w-10 text-white" />
+                  ) : (
+                    <Fingerprint className="h-10 w-10 text-white" />
+                  )}
+                </div>
+
+                <div className="text-center">
+                  <p className="font-medium text-slate-900 dark:text-white">
+                    {isAuthenticating ? "Authenticating..." : success ? "Success!" : "Ready to authenticate"}
+                  </p>
+                  <p className="text-sm text-slate-600 dark:text-slate-400">
+                    {isAuthenticating
+                      ? "Please complete the biometric verification"
+                      : success
+                        ? "Taking you to your dashboard"
+                        : "Click the button below to start"}
+                  </p>
+                </div>
               </div>
             </div>
 
             <Button
               onClick={handlePasskeyLogin}
-              disabled={isAuthenticating || success}
+              disabled={isAuthenticating || success || !username.trim()}
               className="w-full bg-gradient-to-r from-[#47D6AA] to-[#47D6AA]/80 hover:from-[#47D6AA]/90 hover:to-[#47D6AA]/70 text-white transition-all duration-200 shadow-lg hover:shadow-xl"
             >
               {isAuthenticating ? (

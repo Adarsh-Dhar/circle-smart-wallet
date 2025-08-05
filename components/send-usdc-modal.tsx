@@ -9,6 +9,8 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { ArrowLeft, Send, AlertTriangle, CheckCircle, Loader2, Fingerprint } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+import { useWallet } from "@/hooks/use-wallet"
+import { validateAddress } from "@/lib/wallet"
 
 interface SendUSDCModalProps {
   isOpen: boolean
@@ -26,13 +28,14 @@ export function SendUSDCModal({ isOpen, onClose, currentBalance }: SendUSDCModal
   const [riskLevel, setRiskLevel] = useState<RiskLevel>("low")
   const [errors, setErrors] = useState<{ recipient?: string; amount?: string }>({})
   const { toast } = useToast()
+  const { sendUSDCTransaction } = useWallet()
 
   const validateForm = () => {
     const newErrors: { recipient?: string; amount?: string } = {}
 
     if (!recipient) {
       newErrors.recipient = "Recipient address is required"
-    } else if (!/^0x[a-fA-F0-9]{40}$/.test(recipient)) {
+    } else if (!validateAddress(recipient)) {
       newErrors.recipient = "Invalid Ethereum address"
     }
 
@@ -40,6 +43,8 @@ export function SendUSDCModal({ isOpen, onClose, currentBalance }: SendUSDCModal
       newErrors.amount = "Amount is required"
     } else if (isNaN(Number(amount)) || Number(amount) <= 0) {
       newErrors.amount = "Amount must be a positive number"
+    } else if (Number(amount) > Number(currentBalance.replace(/,/g, ""))) {
+      newErrors.amount = "Insufficient balance"
     }
 
     setErrors(newErrors)
@@ -48,7 +53,7 @@ export function SendUSDCModal({ isOpen, onClose, currentBalance }: SendUSDCModal
 
   const handleReview = () => {
     if (validateForm()) {
-      // Simulate risk assessment
+      // Risk assessment based on amount and recipient
       const isHighRisk = Number(amount) > 1000 || recipient.toLowerCase().includes("bad")
       setRiskLevel(isHighRisk ? "high" : "low")
       setStep("review")
@@ -59,7 +64,7 @@ export function SendUSDCModal({ isOpen, onClose, currentBalance }: SendUSDCModal
     if (riskLevel === "high") {
       setStep("authenticating")
 
-      // Simulate passkey authentication
+      // Simulate passkey authentication for high-risk transactions
       setTimeout(async () => {
         try {
           // Mock authentication delay
@@ -77,16 +82,7 @@ export function SendUSDCModal({ isOpen, onClose, currentBalance }: SendUSDCModal
             onClose()
             resetForm()
           } else {
-            setStep("processing")
-            setTimeout(() => {
-              toast({
-                title: "Transaction Sent",
-                description: `Successfully sent $${amount} USDC`,
-                className: "border-[#47D6AA] text-[#47D6AA]",
-              })
-              onClose()
-              resetForm()
-            }, 2000)
+            await processTransaction()
           }
         } catch (error) {
           toast({
@@ -98,16 +94,39 @@ export function SendUSDCModal({ isOpen, onClose, currentBalance }: SendUSDCModal
         }
       }, 100)
     } else {
-      setStep("processing")
-      setTimeout(() => {
+      await processTransaction()
+    }
+  }
+
+  const processTransaction = async () => {
+    setStep("processing")
+    
+    try {
+      const result = await sendUSDCTransaction(recipient, amount)
+      
+      if (result.success) {
         toast({
-          title: "Transaction Sent",
+          title: "Transaction Successful",
           description: `Successfully sent $${amount} USDC`,
           className: "border-[#47D6AA] text-[#47D6AA]",
         })
         onClose()
         resetForm()
-      }, 2000)
+      } else {
+        toast({
+          title: "Transaction Failed",
+          description: result.error || "Transaction failed",
+          variant: "destructive",
+        })
+        setStep("review")
+      }
+    } catch (error) {
+      toast({
+        title: "Transaction Failed",
+        description: error instanceof Error ? error.message : "Transaction failed",
+        variant: "destructive",
+      })
+      setStep("review")
     }
   }
 
@@ -199,77 +218,64 @@ export function SendUSDCModal({ isOpen, onClose, currentBalance }: SendUSDCModal
               <Alert className="border-[#47D6AA] bg-[#47D6AA]/10">
                 <CheckCircle className="h-4 w-4 text-[#47D6AA]" />
                 <AlertDescription className="text-[#47D6AA]">
-                  <Badge className="bg-[#47D6AA] hover:bg-[#47D6AA]/80 text-white mr-2">✅ Ready to Send</Badge>
-                  This transaction passed all compliance checks
+                  This transaction appears to be low risk and can proceed normally.
                 </AlertDescription>
               </Alert>
             ) : (
-              <Alert variant="destructive" className="border-orange-500 bg-orange-50 dark:bg-orange-950/20">
-                <AlertTriangle className="h-4 w-4 text-orange-600" />
-                <AlertDescription className="text-orange-800 dark:text-orange-400">
-                  <Badge variant="destructive" className="bg-orange-500 hover:bg-orange-600 mr-2">
-                    ⚠️ High Risk
-                  </Badge>
-                  This transaction requires passkey reconfirmation
+              <Alert className="border-orange-500 bg-orange-50 dark:bg-orange-950/20">
+                <AlertTriangle className="h-4 w-4 text-orange-500" />
+                <AlertDescription className="text-orange-700 dark:text-orange-400">
+                  This transaction has been flagged as high risk. Additional authentication will be required.
                 </AlertDescription>
               </Alert>
             )}
 
-            <Button
-              onClick={handleSend}
-              disabled={riskLevel === "high"}
-              className={`w-full transition-all duration-200 ${
-                riskLevel === "high"
-                  ? "bg-slate-400 hover:bg-slate-400 cursor-not-allowed"
-                  : "bg-gradient-to-r from-[#47D6AA] to-[#47D6AA]/80 hover:from-[#47D6AA]/90 hover:to-[#47D6AA]/70"
-              } text-white`}
-            >
-              {riskLevel === "high" ? (
-                <>
-                  <Fingerprint className="mr-2 h-4 w-4" />
-                  Requires Passkey Reconfirmation
-                </>
-              ) : (
-                <>
-                  <Send className="mr-2 h-4 w-4" />
-                  Send Transaction
-                </>
-              )}
-            </Button>
-
-            {riskLevel === "high" && (
+            <div className="flex space-x-2">
+              <Button
+                variant="outline"
+                onClick={() => setStep("form")}
+                className="flex-1 border-slate-300 dark:border-slate-600"
+              >
+                Back
+              </Button>
               <Button
                 onClick={handleSend}
-                variant="outline"
-                className="w-full border-orange-500 text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-950/20 bg-transparent"
+                className="flex-1 bg-gradient-to-r from-[#47D6AA] to-[#47D6AA]/80 hover:from-[#47D6AA]/90 hover:to-[#47D6AA]/70 text-white transition-all duration-200"
               >
-                <Fingerprint className="mr-2 h-4 w-4" />
-                Click to Re-authenticate
+                Send Transaction
               </Button>
-            )}
+            </div>
           </div>
         )}
 
         {step === "authenticating" && (
-          <div className="flex flex-col items-center space-y-4 py-8">
-            <div className="h-16 w-16 rounded-full bg-gradient-to-br from-[#4EAAFF] to-[#0B1F56] flex items-center justify-center">
-              <Loader2 className="h-8 w-8 text-white animate-spin" />
-            </div>
-            <div className="text-center">
-              <p className="font-medium">Authenticating...</p>
-              <p className="text-sm text-slate-600 dark:text-slate-400">Please complete the passkey verification</p>
+          <div className="space-y-4">
+            <div className="flex flex-col items-center space-y-4 py-8">
+              <div className="h-20 w-20 rounded-full bg-gradient-to-br from-[#4EAAFF] to-[#0B1F56] flex items-center justify-center shadow-lg">
+                <Fingerprint className="h-10 w-10 text-white" />
+              </div>
+              <div className="text-center">
+                <p className="font-medium text-slate-900 dark:text-white">Additional Authentication Required</p>
+                <p className="text-sm text-slate-600 dark:text-slate-400">
+                  Please complete biometric verification to proceed with this high-risk transaction.
+                </p>
+              </div>
             </div>
           </div>
         )}
 
         {step === "processing" && (
-          <div className="flex flex-col items-center space-y-4 py-8">
-            <div className="h-16 w-16 rounded-full bg-gradient-to-br from-[#47D6AA] to-[#47D6AA]/80 flex items-center justify-center">
-              <Loader2 className="h-8 w-8 text-white animate-spin" />
-            </div>
-            <div className="text-center">
-              <p className="font-medium">Processing Transaction...</p>
-              <p className="text-sm text-slate-600 dark:text-slate-400">Your USDC transfer is being processed</p>
+          <div className="space-y-4">
+            <div className="flex flex-col items-center space-y-4 py-8">
+              <div className="h-20 w-20 rounded-full bg-gradient-to-br from-[#4EAAFF] to-[#0B1F56] flex items-center justify-center shadow-lg">
+                <Loader2 className="h-10 w-10 text-white animate-spin" />
+              </div>
+              <div className="text-center">
+                <p className="font-medium text-slate-900 dark:text-white">Processing Transaction</p>
+                <p className="text-sm text-slate-600 dark:text-slate-400">
+                  Sending {amount} USDC to {recipient.slice(0, 10)}...{recipient.slice(-8)}
+                </p>
+              </div>
             </div>
           </div>
         )}

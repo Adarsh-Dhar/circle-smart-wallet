@@ -4,10 +4,11 @@ import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Copy, Send, TrendingUp, Clock, CheckCircle, XCircle } from "lucide-react"
+import { Copy, Send, TrendingUp, Clock, CheckCircle, XCircle, LogOut } from "lucide-react"
 import { SendUSDCModal } from "@/components/send-usdc-modal"
 import { useToast } from "@/hooks/use-toast"
-import { useRouter } from "next/navigation"
+import { useWallet } from "@/hooks/use-wallet"
+import { formatAddress } from "@/lib/wallet"
 
 interface Transaction {
   id: string
@@ -19,25 +20,25 @@ interface Transaction {
 }
 
 export default function DashboardPage() {
-  const [walletAddress, setWalletAddress] = useState("")
-  const [usdcBalance, setUsdcBalance] = useState("1,234.56")
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const { toast } = useToast()
-  const router = useRouter()
+  const { 
+    isAuthenticated, 
+    isInitializing, 
+    walletAddress, 
+    usdcBalance, 
+    logout 
+  } = useWallet()
 
   useEffect(() => {
     // Check authentication
-    const auth = localStorage.getItem("wallet_authenticated")
-    if (!auth) {
-      router.push("/login")
+    if (!isInitializing && !isAuthenticated) {
+      window.location.href = "/login"
       return
     }
 
-    const address = localStorage.getItem("wallet_address") || ""
-    setWalletAddress(address)
-
-    // Mock transaction data
+    // Mock transaction data - in a real app, this would come from the blockchain
     setTransactions([
       {
         id: "1",
@@ -64,7 +65,7 @@ export default function DashboardPage() {
         hash: "0xghi789...",
       },
     ])
-  }, [router])
+  }, [isAuthenticated, isInitializing])
 
   const copyAddress = () => {
     navigator.clipboard.writeText(walletAddress)
@@ -74,16 +75,47 @@ export default function DashboardPage() {
     })
   }
 
-  const formatAddress = (address: string) => {
-    return `${address.slice(0, 6)}...${address.slice(-4)}`
+  const handleLogout = () => {
+    logout()
+    toast({
+      title: "Logged out",
+      description: "You have been successfully logged out",
+    })
+  }
+
+  if (isInitializing) {
+    return (
+      <div className="min-h-[80vh] flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <div className="h-16 w-16 rounded-full bg-gradient-to-br from-[#4EAAFF] to-[#0B1F56] flex items-center justify-center shadow-lg mx-auto">
+            <div className="h-8 w-8 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+          </div>
+          <p className="text-slate-600 dark:text-slate-300">Loading your smart wallet...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!isAuthenticated) {
+    return null // Will redirect to login
   }
 
   return (
     <div className="space-y-8">
       {/* Header */}
-      <div className="space-y-2">
-        <h1 className="text-3xl font-bold text-[#0B1F56] dark:text-white">Dashboard</h1>
-        <p className="text-slate-600 dark:text-slate-300">Manage your smart wallet and USDC transfers</p>
+      <div className="flex items-center justify-between">
+        <div className="space-y-2">
+          <h1 className="text-3xl font-bold text-[#0B1F56] dark:text-white">Dashboard</h1>
+          <p className="text-slate-600 dark:text-slate-300">Manage your smart wallet and USDC transfers</p>
+        </div>
+        <Button
+          onClick={handleLogout}
+          variant="outline"
+          className="border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700"
+        >
+          <LogOut className="mr-2 h-4 w-4" />
+          Logout
+        </Button>
       </div>
 
       {/* Wallet Address Card */}
@@ -93,14 +125,15 @@ export default function DashboardPage() {
         </CardHeader>
         <CardContent>
           <div className="flex items-center justify-between">
-            <div className="code-block flex-1 mr-4 bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-100">
-              {walletAddress}
+            <div className="code-block flex-1 mr-4 bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-100 p-3 rounded-lg font-mono text-sm">
+              {walletAddress || "Loading..."}
             </div>
             <Button
               variant="outline"
               size="icon"
               onClick={copyAddress}
               className="shrink-0 bg-transparent hover:bg-slate-100 dark:hover:bg-slate-700 border-slate-300 dark:border-slate-600"
+              disabled={!walletAddress}
             >
               <Copy className="h-4 w-4" />
             </Button>
