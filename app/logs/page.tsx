@@ -48,7 +48,7 @@ export default function LogsPage() {
       return
     }
 
-    // Mock risk log data
+    // Risk log data - in a real app, this would come from the blockchain and compliance system
     const mockLogs: RiskLog[] = [
       {
         id: "1",

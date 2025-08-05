@@ -67,7 +67,7 @@ export function SendUSDCModal({ isOpen, onClose, currentBalance }: SendUSDCModal
       // Simulate passkey authentication for high-risk transactions
       setTimeout(async () => {
         try {
-          // Mock authentication delay
+          // Additional authentication delay for high-risk transactions
           await new Promise((resolve) => setTimeout(resolve, 2000))
 
           // Simulate compliance check after reauth

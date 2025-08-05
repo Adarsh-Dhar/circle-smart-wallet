@@ -38,7 +38,7 @@ export default function DashboardPage() {
       return
     }
 
-    // Mock transaction data - in a real app, this would come from the blockchain
+    // Transaction data - in a real app, this would come from the blockchain
     setTransactions([
       {
         id: "1",

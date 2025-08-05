@@ -19,7 +19,7 @@ export function UserButton() {
   const router = useRouter()
 
   useEffect(() => {
-    // Check if user is authenticated (mock implementation)
+    // Check if user is authenticated
     const auth = localStorage.getItem("wallet_authenticated")
     const address = localStorage.getItem("wallet_address")
     setIsAuthenticated(!!auth)

@@ -3,16 +3,6 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
 import { useToast } from '@/hooks/use-toast'
-import {
-  createWebAuthnCredential,
-  getWebAuthnCredential,
-  createSmartAccount,
-  sendUSDC,
-  getUSDCBalance,
-  formatAddress,
-  validateAddress,
-  parseUSDCAmount
-} from '@/lib/wallet'
 
 interface WalletContextType {
   isAuthenticated: boolean
@@ -79,6 +69,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         throw new Error('WebAuthn is not supported in this browser')
       }
 
+      // Dynamic import to prevent chunk loading errors
+      const {
+        createWebAuthnCredential,
+        getWebAuthnCredential,
+        createSmartAccount,
+        getUSDCBalance
+      } = await import('@/lib/wallet')
+
       // Try to get existing credential first
       let credential: PublicKeyCredential
       try {
@@ -92,8 +90,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       const account = await createSmartAccount(credential)
       setSmartAccount(account)
 
-      // Get wallet address (this would be the smart account address)
-      const address = await account.address
+      // Get wallet address
+      const address = account.address
       setWalletAddress(address)
 
       // Store authentication state
@@ -143,6 +141,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         throw new Error('Smart account not initialized')
       }
 
+      // Dynamic import to prevent chunk loading errors
+      const {
+        sendUSDC,
+        validateAddress,
+        parseUSDCAmount
+      } = await import('@/lib/wallet')
+
       if (!validateAddress(toAddress)) {
         throw new Error('Invalid recipient address')
       }
@@ -179,6 +184,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     try {
       if (!smartAccount) return
       
+      // Dynamic import to prevent chunk loading errors
+      const { getUSDCBalance } = await import('@/lib/wallet')
       const balance = await getUSDCBalance(smartAccount)
       setUsdcBalance(balance)
     } catch (error) {
