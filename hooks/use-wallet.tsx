@@ -14,6 +14,7 @@ interface WalletContextType {
   logout: () => void
   sendUSDCTransaction: (toAddress: string, amount: string) => Promise<{ success: boolean; hash?: string; error?: string }>
   refreshBalance: () => Promise<void>
+  setBalanceUpdateCallback: (callback: ((balance: string) => void) | undefined) => void
 }
 
 const WalletContext = createContext<WalletContextType | undefined>(undefined)
@@ -24,12 +25,28 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [walletAddress, setWalletAddress] = useState("")
   const [usdcBalance, setUsdcBalance] = useState("0.00")
   const [smartAccount, setSmartAccount] = useState<any>(null)
+  const [balanceUpdateCallback, setBalanceUpdateCallback] = useState<((balance: string) => void) | undefined>(undefined)
   const router = useRouter()
   const { toast } = useToast()
 
   useEffect(() => {
     initializeWallet()
   }, [])
+
+  // Add periodic balance refresh when authenticated
+  useEffect(() => {
+    if (!isAuthenticated || !smartAccount) return
+
+    // Refresh balance immediately
+    refreshBalance()
+
+    // Set up periodic refresh every 30 seconds
+    const interval = setInterval(() => {
+      refreshBalance()
+    }, 30000) // 30 seconds
+
+    return () => clearInterval(interval)
+  }, [isAuthenticated, smartAccount])
 
   const initializeWallet = async () => {
     try {
@@ -182,14 +199,28 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const refreshBalance = async () => {
     try {
-      if (!smartAccount) return
+      if (!smartAccount) {
+        console.log('No smart account available for balance refresh')
+        return
+      }
+      
+      console.log('Refreshing USDC balance for address:', smartAccount.address)
       
       // Dynamic import to prevent chunk loading errors
       const { getUSDCBalance } = await import('@/lib/wallet')
       const balance = await getUSDCBalance(smartAccount)
+      
+      console.log('Balance updated:', { oldBalance: usdcBalance, newBalance: balance })
       setUsdcBalance(balance)
+      
+      // Notify listeners of balance update
+      if (balanceUpdateCallback) {
+        balanceUpdateCallback(balance)
+      }
     } catch (error) {
       console.error('Failed to refresh balance:', error)
+      // Don't show toast for automatic refreshes to avoid spam
+      // Only show error for manual refreshes
     }
   }
 
@@ -203,6 +234,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     logout,
     sendUSDCTransaction,
     refreshBalance,
+    setBalanceUpdateCallback,
   }
 
   return <WalletContext.Provider value={value}>{children}</WalletContext.Provider>

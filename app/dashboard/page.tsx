@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Copy, Send, TrendingUp, Clock, CheckCircle, XCircle, LogOut } from "lucide-react"
+import { Copy, Send, TrendingUp, Clock, CheckCircle, XCircle, LogOut, RefreshCw } from "lucide-react"
 import { SendUSDCModal } from "@/components/send-usdc-modal"
 import { useToast } from "@/hooks/use-toast"
 import { useWallet } from "@/hooks/use-wallet"
@@ -23,13 +23,17 @@ export default function DashboardPage() {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [isLoadingTransactions, setIsLoadingTransactions] = useState(true)
+  const [isRefreshingBalance, setIsRefreshingBalance] = useState(false)
+  const [lastBalanceUpdate, setLastBalanceUpdate] = useState<Date | null>(null)
   const { toast } = useToast()
   const { 
     isAuthenticated, 
     isInitializing, 
     walletAddress, 
     usdcBalance, 
-    logout 
+    logout,
+    refreshBalance,
+    setBalanceUpdateCallback
   } = useWallet()
 
   useEffect(() => {
@@ -44,6 +48,16 @@ export default function DashboardPage() {
       fetchTransactions()
     }
   }, [isAuthenticated, isInitializing, walletAddress])
+
+  // Set up balance update callback
+  useEffect(() => {
+    if (isAuthenticated) {
+      setBalanceUpdateCallback((balance: string) => {
+        setLastBalanceUpdate(new Date())
+        console.log('Balance updated via callback:', balance)
+      })
+    }
+  }, [isAuthenticated, setBalanceUpdateCallback])
 
   const fetchTransactions = async () => {
     try {
@@ -87,6 +101,27 @@ export default function DashboardPage() {
       title: "Logged out",
       description: "You have been successfully logged out",
     })
+  }
+
+  const handleRefreshBalance = async () => {
+    try {
+      setIsRefreshingBalance(true)
+      await refreshBalance()
+      setLastBalanceUpdate(new Date())
+      toast({
+        title: "Balance Updated",
+        description: "Your USDC balance has been refreshed",
+      })
+    } catch (error) {
+      console.error('Failed to refresh balance:', error)
+      toast({
+        title: "Refresh Failed",
+        description: "Failed to refresh balance. Please try again.",
+        variant: "destructive"
+      })
+    } finally {
+      setIsRefreshingBalance(false)
+    }
   }
 
   if (isInitializing) {
@@ -152,12 +187,29 @@ export default function DashboardPage() {
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center justify-between text-slate-900 dark:text-white">
             <span>USDC Balance</span>
-            <TrendingUp className="h-5 w-5 text-[#47D6AA] group-hover:scale-110 transition-transform duration-300" />
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handleRefreshBalance}
+                disabled={isRefreshingBalance}
+                className="h-8 w-8 hover:bg-slate-100 dark:hover:bg-slate-700"
+                title="Refresh USDC balance"
+              >
+                <RefreshCw className={`h-4 w-4 ${isRefreshingBalance ? 'animate-spin' : ''}`} />
+              </Button>
+              <TrendingUp className="h-5 w-5 text-[#47D6AA] group-hover:scale-110 transition-transform duration-300" />
+            </div>
           </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
             <div className="text-4xl font-bold text-[#0B1F56] dark:text-white">${usdcBalance}</div>
+            {lastBalanceUpdate && (
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Last updated: {lastBalanceUpdate.toLocaleTimeString()}
+              </p>
+            )}
             <Button
               onClick={() => setIsModalOpen(true)}
               className="w-full bg-gradient-to-r from-[#47D6AA] to-[#47D6AA]/80 hover:from-[#47D6AA]/90 hover:to-[#47D6AA]/70 text-white transition-all duration-200 shadow-lg hover:shadow-xl"
@@ -169,6 +221,31 @@ export default function DashboardPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Faucet Information Alert */}
+      {usdcBalance === "0.00" && (
+        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border border-blue-200 dark:border-blue-700 rounded-lg p-4">
+          <div className="flex items-start space-x-3">
+            <div className="flex-shrink-0">
+              <div className="h-6 w-6 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center">
+                <span className="text-blue-600 dark:text-blue-400 text-sm font-semibold">💡</span>
+              </div>
+            </div>
+            <div className="flex-1">
+              <h3 className="text-sm font-medium text-blue-900 dark:text-blue-100">
+                Need USDC to test?
+              </h3>
+              <p className="mt-1 text-sm text-blue-700 dark:text-blue-300">
+                Get test USDC from a faucet and click the refresh button above to update your balance. 
+                The balance will also automatically refresh every 30 seconds.
+              </p>
+              <div className="mt-2 text-xs text-blue-600 dark:text-blue-400">
+                <p>💧 <strong>Faucet:</strong> Visit a Polygon Amoy faucet and send tokens to: <code className="bg-blue-100 dark:bg-blue-800 px-1 rounded">{walletAddress}</code></p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Recent Transactions */}
       <Card className="neumorphic-shadow dark:neumorphic-shadow-dark border-0 bg-gradient-to-br from-slate-50 to-white dark:from-slate-900 dark:to-slate-800 transition-all duration-300">
